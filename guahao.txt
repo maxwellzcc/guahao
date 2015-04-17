@@ -1,0 +1,313 @@
+// ==UserScript==
+// @name       guahao
+// @namespace  http://use.i.E.your.homepage/
+// @version    0.1
+// @description  enter something useful
+// @match      http://www.bjguahao.gov.cn/comm/content.php*
+// @copyright  2012+, You
+// ==/UserScript==
+
+// 注意!
+// 1. 当使用了enableAdvancedFilter （上下午，医生level,费用）时候，会用ajax获取内容并attach在页面上。 当有符合条件的号时候，音乐提醒（有内容attach在页面上并不一定有号）
+// 2.仅仅使用了dayWhiteList 不会用ajax获取内容并attache到页面
+
+
+//Configuration
+//level 和 fate 设置一个就可以，一般来说是一一对应的
+//whiteList and blackList is either-or. So please remember only set one list.
+var globalConfig = {
+    "首都儿科研究所附属儿童医院": {
+        "mothRange":["2014-09"],
+        "dayWhiteList":["02","03","04","05","09","10","11"],//"01","23",... 包含双引号
+        "dayBlackList":[],
+        "ampmWhiteList":[],
+        "ampmBlackList":[],
+        "levelWhiteList":[],//"知名专家","主任医师","副主任医师"，包含双引号
+        "levelBlackList":[],
+        "fateWhiteList":[],//"7.00",具体看医院，包含双引号
+        "fateBlackList":[]
+    },
+        
+    "北京协和医院":{
+        "mothRange":["2014-09"],
+        "dayWhiteList":[],//"01","23",... 包含双引号
+        "dayBlackList":[],
+        "ampmWhiteList":[],
+        "ampmBlackList":[],
+        "levelWhiteList":[],//"知名专家","主任医师","副主任医师"，包含双引号
+        "levelBlackList":[],
+        "fateWhiteList":[],//"7.00",具体看医院，包含双引号
+        "fateBlackList":[]
+    },
+    
+    "北京大学第一医院":{
+        "mothRange":["2014-08","2014-09"],
+        "dayWhiteList":[],//"01","23",... 包含双引号
+        "dayBlackList":[],
+        "ampmWhiteList":[],
+        "ampmBlackList":[],
+        "levelWhiteList":[],//"知名专家","主任医师","副主任医师"，包含双引号
+        "levelBlackList":[],
+        "fateWhiteList":["7.00","9.00"],//"7.00",具体看医院，包含双引号
+        "fateBlackList":[]
+    },
+    "中国人民解放军总医院":{
+         "mothRange":["2014-09"],
+        "dayWhiteList":[],//"01","23",... 包含双引号
+        "dayBlackList":[],
+        "ampmWhiteList":[],
+        "ampmBlackList":[],
+        "levelWhiteList":[],//"知名专家","主任医师","副主任医师"，包含双引号
+        "levelBlackList":[],
+        "fateWhiteList":[],//"7.00",具体看医院，包含双引号
+        "fateBlackList":["4.50","7.50"]
+    },
+    
+    "首都医科大学附属北京安贞医院":{
+         "mothRange":["2015-05"],
+        "dayWhiteList":[],//"01","23",... 包含双引号
+        "dayBlackList":[],
+        "ampmWhiteList":[],
+        "ampmBlackList":[],
+        "levelWhiteList":[],//"知名专家","主任医师","副主任医师"，包含双引号
+        "levelBlackList":[],
+        "fateWhiteList":["14.00"],//"7.00",具体看医院，包含双引号
+    }
+}
+
+hospital = $(".hospital p").html().split("——")[0]
+//alert(hospital)
+
+hospitalConfig = globalConfig[hospital]
+//var mothRange = ["2014-09"]
+var mothRange = hospitalConfig["mothRange"]
+
+//whiteList and blackList is either-or. So please remember only set one list.
+//var dayWhiteList = ["02","03","04","05","09","10","11"] //"01","23",... 包含双引号
+//var dayBlackList = []
+var dayWhiteList = hospitalConfig["dayWhiteList"]
+var dayBlackList = hospitalConfig["dayBlackList"]
+var enableDayFilter = dayWhiteList.length !=0 || dayBlackList.length !=0
+
+//var ampmWhiteList = []
+//var ampmBlackList = []
+var ampmWhiteList = hospitalConfig["ampmWhiteList"]
+var ampmBlackList = hospitalConfig["ampmBlackList"]
+var enableAmpmFilter = ampmWhiteList.length!=0 || ampmBlackList.length!=0
+
+//level 和 fate 设置一个就可以，一般来说是一一对应的
+//var levelWhiteList = []//"知名专家","主任医师","副主任医师"，包含双引号
+//var levelBlackList = []
+var levelWhiteList = hospitalConfig["levelWhiteList"]
+var levelBlackList = hospitalConfig["levelBlackList"]
+var enableLevelFilter = levelWhiteList.length!=0 || levelBlackList.length!=0
+
+
+//var fateWhiteList = []//"7.00",具体看医院，包含双引号
+//var fateBlackList = []
+var fateWhiteList = hospitalConfig["fateWhiteList"]
+var fateBlackList = hospitalConfig["fateBlackList"]
+var enableFateFilter = fateWhiteList.length!=0 || fateBlackList.length!=0
+
+
+var enableAdvancedFilter = enableAmpmFilter || enableLevelFilter||enableFateFilter 
+
+// if there only is one month, just reload the page.
+var onlyReload = mothRange.length == 1 ? true:false
+var interval = 5000 //毫秒
+getTicket()
+//playSound()
+function getTicket (){
+    if (hasQuota()){  
+        //alert("get ticket")
+        playSound()
+        return
+    }    
+    if (onlyReload){
+        setTimeout(reload,interval)
+    } else {
+        setTimeout(refresh,interval)
+    }
+}
+function contains(obj,a) {
+  for(var i = 0; i < a.length; i++) {
+    if(a[i] === obj){
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasQuota(){
+    var result = $(".greenbg").length != 0
+    if (result == false){return result }
+    
+    var availableDays =[]
+    $(".greenbg a p").map(function(){
+        var day = $(this).html()
+        if (enableDayFilter){
+            if (dayWhiteList.length!=0 && contains(day,dayWhiteList) ){
+                availableDays.push(day)
+            }
+            
+            if(dayBlackList.length!=0 && !contains(day,dayWhiteList) ){
+                availableDays.push(day)
+            }
+        } else {
+             availableDays.push(day)
+        }
+    })
+   
+    result = availableDays.length>0
+    if (result == false) {return result} 
+   
+    if (enableAdvancedFilter){
+        //alert("enableAdvancedFilter" +enableAdvancedFilter)
+        result = false;
+        //get result for all available days
+         $(".greenbg a").map(function(){
+           var day = $(this).find("p").html()
+           if (!contains(day,availableDays)){return true}//return true means continue
+          
+           var reurl = $(this).attr("href")
+           var data = $.ajax({
+               url:reurl,
+               async: false,
+           }).responseText
+           $("body").append("<div class='queryResult'>"+data+"</div>")
+        })
+         
+        // advanced Filter
+         $(".queryResult tr").map(function (idx,element){
+             var date = $(this).find('td:eq(0)').html()
+             var week = $(this).find('td:eq(1)').html()
+             var ampm =  $(this).find('td:eq(2)').html()
+             var department =  $(this).find('td:eq(3)').html()
+             var doctor =  $(this).find('td:eq(4)').html()
+             var level =  $(this).find('td:eq(5)').html()
+             var fate =  $(this).find('td:eq(6)').html()
+             var strength =  $(this).find('td:eq(7)').html()
+             var allNumber =  $(this).find('td:eq(8)').html()
+             var remainNumber =  $(this).find('td:eq(9)').html()
+             var operation = $(this).find('td:eq(10) a').attr("href")
+
+             //if there is no available tickets, return true to go to next element
+             if (operation ==undefined){
+                 return true;//this means continue
+             }
+             
+            var flag = false;
+            // ampm filter
+            if (enableAmpmFilter){
+                if (ampmWhiteList.length != 0 ){
+                    flag = contains(ampm, ampmWhiteList);
+                } else if (ampmBlackList.length != 0){
+                    flag = !contains(ampm, ampmBlackList);
+                }
+            }     
+            // level filter
+            if (enableLevelFilter){
+                if (levelWhiteList.length != 0 ){
+                    flag = contains(level, levelWhiteList);
+                } else if (levelWhiteList.length != 0){
+                    flag = !contains(level, levelWhiteList);
+                }
+            }
+
+            // fate filter
+            if (enableFateFilter){
+                if (fateWhiteList.length != 0 ){
+                    flag = contains(fate, fateWhiteList);
+                } else if (fateWhiteList.length != 0){
+                    flag = !contains(fate, fateWhiteList);
+                }
+            }
+
+          //  alert("op is" + operation+ " date" + date + " fate"+fate+" flag"+flag)
+            if(flag){
+                result = true
+            } // return false here means break
+        }) //.queryResult tr
+    }
+   // alert("resutl is "+result)
+    return result;
+}
+function playSound(){
+    var audioElement = document.createElement('audio');
+    audioElement.setAttribute('src', 'http://static.fishlee.net/resources/audio/music2.ogg');
+    audioElement.setAttribute('autoplay', 'autoplay');
+    audioElement.setAttribute('loop', 'true');
+    audioElement.setAttribute('id', 'alarmSound')
+}
+function reload(){
+    window.location.reload(true)
+}
+function refresh(){
+    redirectHref = getRedirectHref()
+    window.location.href = redirectHref
+}
+
+function getRedirectHref(){
+    var upHref = $(".nyr_up >a").attr("href")
+    var downHref = $(".nyr_down >a").attr("href")
+    var currentDate = $(".nyr_center").html()
+    
+    
+    //get idx
+    var idx = 0
+    
+    for( idx = 0; idx < mothRange.length; idx++ ){
+        if(currentDate == mothRange[idx]){break;}
+    }
+    
+    if ( 0 == idx || "#" == upHref ){
+        // set command
+        //alert(1)
+        GM_setValue('command','down')
+        //alert(11)
+        return downHref
+    } else if ( mothRange.length-1 == idx || "#" == downHref){
+        // set command
+        //alert(2)
+        GM_setValue('command','up')
+        // alert(22)
+        return upHref
+    } else {
+        //get command
+        //alert(3)
+        var command = GM_getValue('command','down')
+        if ( "up" == command){
+            return upHref
+        } else if ( "down" == command){
+            return downHref
+        }
+    }
+}
+
+
+
+// define storage
+if (typeof GM_getValue == 'undefined') {
+    GM_getValue = function(name, defaultValue) {
+        var value = localStorage.getItem(name);
+        if (!value)
+            return defaultValue;
+        var type = value[0];
+        value = value.substring(1);
+        switch (type) {
+            case 'b':
+                return value == 'true';
+            case 'n':
+                return Number(value);
+            default:
+                return value;
+        }
+    }
+}
+
+if (typeof GM_setValue == 'undefined') {
+    GM_setValue = function(name, value) {
+        value = (typeof value)[0] + value;
+        localStorage.setItem(name, value);
+    }
+}
